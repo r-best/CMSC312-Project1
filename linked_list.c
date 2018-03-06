@@ -31,9 +31,9 @@ void pushJob(struct PrintJob *job){
     }
 
     int c = count();
-    if(c >= QUEUE_MAX) // If queue is now full, lock full semaphore
-        sem_wait(&full);
-    else if(c == 1) // If queue is no longer empty, free the empty semaphore
+    if(c < QUEUE_MAX) // If queue is now full, lock full semaphore
+        sem_post(&full);
+    if(c == 1) // If queue is no longer empty, free the empty semaphore
         sem_post(&empty);
     printf("PUSHING DONE\n");
 }
@@ -53,10 +53,6 @@ struct PrintJob* popJob(){
         sem_post(&full);
     if(c != 0)
         sem_post(&empty);
-    // else if(c == 0){ // If queue is empty, lock the empty semaphore
-    //     printf("FUCKkkkkkkkkkk %d\n", job->size);
-    //     sem_wait(&empty);
-    // }
 
     printf("POPPING DONE\n");
     return job;

@@ -1,0 +1,3 @@
+struct PrintJob{
+    int size;
+};

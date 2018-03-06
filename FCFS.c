@@ -6,7 +6,6 @@
 #include <pthread.h>
 #include <semaphore.h>
 
-#include "main.h"
 #include "linked_list.h"
 
 void signalHandler(int signal){

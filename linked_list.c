@@ -1,7 +1,6 @@
 #include <stdlib.h>
 #include <semaphore.h>
 
-#include "main.h"
 #include "linked_list.h"
 
 #define QUEUE_MAX 15

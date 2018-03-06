@@ -22,6 +22,7 @@ void initPrintJob(struct PrintJob *job){
 }
 
 void* producerFn(void *args){
+    printf("Starting producer thread\n");
     int numJobs = (rand() % 20) + 1;
     for(int i = 0; i <= numJobs; i++){
         struct PrintJob *job = malloc(sizeof(struct PrintJob));
@@ -33,13 +34,14 @@ void* producerFn(void *args){
         sem_wait(&mutex);
         sem_post(&full);
         pushJob(job);
-        printf("Produce %d", job->size);
+        printf("Produced %d\n", job->size);
         sem_post(&mutex);
     }
     pthread_exit(0);
 }
 
 void* consumerFn(void *args){
+    printf("Starting consumer thread\n");
     while(1){
         sem_wait(&empty);
         sem_wait(&mutex);
@@ -56,7 +58,7 @@ void* consumerFn(void *args){
             if(counter == numProducers)
                 break;
         }
-        printf("Consume %d", size);
+        printf("Consumed %d\n", size);
         sleep(size);
     }
     pthread_exit(0);
@@ -77,43 +79,45 @@ int main(int argc, char *argv[]){
     int numProducers = atoi(argv[1]);
     int numConsumers = atoi(argv[2]);
 
-    printf("NUMPRODUCERS: %d", numProducers);
-    printf("NUMCONSUMERS: %d", numConsumers);
+    printf("NUMPRODUCERS: %d\n", numProducers);
+    printf("NUMCONSUMERS: %d\n", numConsumers);
 
     // Seed random
     srand(time(NULL));
 
     // Initialize semaphores
-    printf("Initializing semaphores");
+    printf("Initializing semaphores...\n");
     sem_init(&mutex, 0, 0);
     sem_init(&empty, 0, 1);
     sem_init(&full, 0, 0);
+    printf("\tDone\n");
 
     // Create producers
-    printf("Creating producer threads");
+    printf("Creating producer threads...\n");
     pthread_t **producers = malloc(sizeof(pthread_t*) * numProducers);
     for(int i = 0; i < numProducers; i++){
         producers[i] = malloc(sizeof(pthread_t));
         int ret = pthread_create(producers[i], NULL, producerFn, NULL);
         if(ret < 0){
-            printf("Error spawning producer thread %d", i+1);
+            printf("Error spawning producer thread %d\n", i+1);
             exit(-1);
         }
     }
+    printf("\tDone\n");
 
     // Create consumers
-    printf("Creating consumer threads");
+    printf("Creating consumer threads...\n");
     counter = 0;
     pthread_t **consumers = malloc(sizeof(pthread_t*) * numConsumers);
     for(int i = 0; i < numConsumers; i++){
         consumers[i] = malloc(sizeof(pthread_t));
         int ret = pthread_create(consumers[i], NULL, consumerFn, NULL);
         if(ret < 0){
-            printf("Error spawning producer thread %d", i+1);
+            printf("Error spawning producer thread %d\n", i+1);
             exit(-1);
         }
-        
     }
+    printf("\tDone\n");
 
     for(int i = 0; i < numProducers; i++){
         pthread_join(*producers[i], NULL);

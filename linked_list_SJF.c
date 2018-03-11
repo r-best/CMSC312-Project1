@@ -56,12 +56,18 @@ struct PrintJob* popJob(){
         prev = current;
         current = current->next;
     }
+        printf("LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL\n");
     // Remove smallest from the list and return its job
-    beforeSmallest->next = smallest->next;
-    smallest->next = NULL;
+    if(smallest == head){
+        head = head->next;
+    }
+    else {
+        beforeSmallest->next = smallest->next;
+        smallest->next = NULL;
+    }
     struct PrintJob *job = smallest->job;
     free(smallest);
-
+    
     int c = count();
     if(c == QUEUE_MAX-1) // If queue is no longer full, free the full semaphore
         sem_post(&full);

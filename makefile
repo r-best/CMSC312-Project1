@@ -1,12 +1,14 @@
-default: FCFS.out
+default: FCFS
 
-FCFS.out : FCFS.o linked_list.o
+FCFS: FCFS.out
+
+FCFS.out : main.o linked_list_FCFS.o
 	gcc -pthread $^ -o $@
 
-FCFS.o : FCFS.c linked_list.h
+main.o : main.c linked_list.h
 	gcc -Wall -c $< -o $@
 
-linked_list.o : linked_list.c linked_list.h
+linked_list_FCFS.o : linked_list_FCFS.c linked_list.h
 	gcc -Wall -c $< -o $@
 
 clean :

@@ -12,7 +12,6 @@ struct Node {
 } *head;
 
 void pushJob(struct PrintJob *job){
-    printf("PUSHING\n");
     struct Node *new = (struct Node *)malloc(sizeof(struct Node));
     if(new == NULL){
         printf("Error allocating memory\n");
@@ -35,11 +34,9 @@ void pushJob(struct PrintJob *job){
         sem_post(&full);
     if(c == 1) // If queue is no longer empty, free the empty semaphore
         sem_post(&empty);
-    printf("PUSHING DONE\n");
 }
 
 struct PrintJob* popJob(){
-    printf("POPPING\n");
     if(head == NULL){
         return NULL;
     }
@@ -56,7 +53,7 @@ struct PrintJob* popJob(){
         prev = current;
         current = current->next;
     }
-        printf("LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL\n");
+
     // Remove smallest from the list and return its job
     if(smallest == head){
         head = head->next;
@@ -74,7 +71,6 @@ struct PrintJob* popJob(){
     if(c != 0)
         sem_post(&empty);
 
-    printf("POPPING DONE\n");
     return job;
 }
 

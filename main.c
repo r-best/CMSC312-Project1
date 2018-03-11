@@ -14,17 +14,16 @@ void signalHandler(int signal){
     }
 }
 
+int randBetween(int min, int max){
+    return rand() % (max + 1 - min) + min;
+}
+
 sem_t mutex;
 int numProducers, numConsumers, counter;
 
-void initPrintJob(struct PrintJob *job){
-    // printf("Initializing print job\n");
-    job->size = 2;//rand() % (1000 + 1 - 100) + 100;
-}
-
 void* producerFn(void *args){
     printf("Starting producer thread\n");
-    int numJobs = 1;//(rand() % 20) + 1;
+    int numJobs = (rand() % 20) + 1;
     for(int i = 0; i <= numJobs; i++){
         struct PrintJob *job = malloc(sizeof(struct PrintJob));
         if(job == NULL){
@@ -32,7 +31,7 @@ void* producerFn(void *args){
             exit(-1);
         }
         if(i < numJobs)
-            initPrintJob(job);
+            job->size = randBetween(100, 1000);
         else // If all jobs done, insert a flag job instead (-1 size to tell consumers you're done)
             job->size = -1;
         sem_wait(&full);
@@ -41,6 +40,12 @@ void* producerFn(void *args){
         pushJob(job);
         printf("Produced %d\n", job->size);
         sem_post(&mutex);
+
+        float seconds = randBetween(1, 10) / 10;
+        struct timespec ts;
+        ts.tv_sec = seconds;
+        ts.tv_nsec = seconds * 1000000000;
+        nanosleep(&ts, NULL);
     }
     printf("Producer thread exiting\n");
     pthread_exit(0);
@@ -52,10 +57,8 @@ void* consumerFn(void *args){
         sem_wait(&empty);
         sem_wait(&mutex);
         struct PrintJob *job = popJob();
-        // sem_post(&empty);
         sem_post(&mutex);
         if(job == NULL){
-            // sem_post(&mutex);
             continue;
         }
         int size = job->size;
@@ -64,19 +67,12 @@ void* consumerFn(void *args){
         // If this is a flag job, increment counter
         if(size < 0){
             counter++;
-            printf("COUNTER: %d %d\n", counter, numProducers);
-            // If counter has reached numProducers, all producers are done so break
-            if(counter == numProducers){
-                printf("YES\n");
-                // break;
-            }
         }
         printf("Consumed %d\n", size);
         sleep(size / 1000);
     }
     printf("Consumer thread exiting\n");
     sem_post(&empty);
-    printf("A\n");
     pthread_exit(0);
 }
 
@@ -122,7 +118,6 @@ int main(int argc, char *argv[]){
             exit(-1);
         }
     }
-    printf("\tDone\n");
 
     // Create consumers
     printf("Creating consumer threads...\n");
@@ -139,7 +134,6 @@ int main(int argc, char *argv[]){
             exit(-1);
         }
     }
-    printf("\tDone\n");
 
     for(int i = 0; i < numProducers; i++){
         pthread_join(producers[i], NULL);

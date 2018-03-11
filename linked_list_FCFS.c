@@ -12,7 +12,6 @@ struct Node {
 } *head;
 
 void pushJob(struct PrintJob *job){
-    printf("PUSHING\n");
     struct Node *new = (struct Node *)malloc(sizeof(struct Node));
     if(new == NULL){
         printf("Error allocating memory\n");
@@ -35,11 +34,9 @@ void pushJob(struct PrintJob *job){
         sem_post(&full);
     if(c == 1) // If queue is no longer empty, free the empty semaphore
         sem_post(&empty);
-    printf("PUSHING DONE\n");
 }
 
 struct PrintJob* popJob(){
-    printf("POPPING\n");
     if(head == NULL){
         return NULL;
     }
@@ -47,6 +44,7 @@ struct PrintJob* popJob(){
     head = head->next;
     struct PrintJob *job = temp->job;
     free(temp);
+    
     int c = count();
     printf("FUCK %d\n", c);
     if(c == QUEUE_MAX-1) // If queue is no longer full, free the full semaphore
@@ -54,7 +52,6 @@ struct PrintJob* popJob(){
     if(c != 0)
         sem_post(&empty);
 
-    printf("POPPING DONE\n");
     return job;
 }
 

@@ -55,7 +55,8 @@ void signalHandler(int signal){
 }
 
 void* producerFn(void *args){
-    printf("Starting producer thread\n");
+    int thread_num = *((int*)args);
+    printf("Starting producer %d\n", thread_num);
     int numJobs = (rand() % 20) + 1;
     for(int i = 0; i <= numJobs; i++){
         struct PrintJob *job = malloc(sizeof(struct PrintJob));
@@ -71,7 +72,7 @@ void* producerFn(void *args){
         sem_wait(&mutex);
         sem_post(&full);
         pushJob(job);
-        printf("Produced %d\n", job->size);
+        printf("Producer %d produced %d\n", thread_num, job->size);
         sem_post(&mutex);
 
         float seconds = randBetween(1, 10) / 10;
@@ -80,12 +81,14 @@ void* producerFn(void *args){
         ts.tv_nsec = seconds * 1000000000;
         nanosleep(&ts, NULL);
     }
-    printf("Producer thread exiting\n");
+    printf("Producer %d exiting\n", thread_num);
+    free(args);
     pthread_exit(0);
 }
 
 void* consumerFn(void *args){
-    printf("Starting consumer thread\n");
+    int thread_num = *((int*)args);
+    printf("Starting consumer %d\n", thread_num);
     while(counter < numProducers){
         sem_wait(&empty);
         sem_wait(&mutex);
@@ -101,11 +104,12 @@ void* consumerFn(void *args){
         if(size < 0){
             counter++;
         }
-        printf("Consumed %d\n", size);
+        printf("Consumer %d consumed %d\n", thread_num, size);
         sleep(size / 1000);
     }
-    printf("Consumer thread exiting\n");
+    printf("Consumer %d exiting\n", thread_num);
     sem_post(&empty);
+    free(args);
     pthread_exit(0);
 }
 
@@ -144,10 +148,16 @@ int main(int argc, char *argv[]){
         printf("Error allocating memory\n");
         exit(-1);
     }
-    for(int i = 0; i < numProducers; i++){
-        int ret = pthread_create(&producers[i], NULL, producerFn, NULL);
+    for(int i = 1; i <= numProducers; i++){
+        int *thread_num = malloc(sizeof(int));
+        if(thread_num == NULL){
+            printf("Error allocating memory\n");
+            exit(-1);
+        }
+        *thread_num = i;
+        int ret = pthread_create(&producers[i-1], NULL, producerFn, thread_num);
         if(ret < 0){
-            printf("Error spawning producer thread %d\n", i+1);
+            printf("Error spawning producer thread %d\n", i);
             exit(-1);
         }
     }
@@ -160,10 +170,16 @@ int main(int argc, char *argv[]){
         printf("Error allocating memory\n");
         exit(-1);
     }
-    for(int i = 0; i < numConsumers; i++){
-        int ret = pthread_create(&consumers[i], NULL, consumerFn, NULL);
+    for(int i = 1; i <= numConsumers; i++){
+        int *thread_num = malloc(sizeof(int));
+        if(thread_num == NULL){
+            printf("Error allocating memory\n");
+            exit(-1);
+        }
+        *thread_num = i;
+        int ret = pthread_create(&consumers[i-1], NULL, consumerFn, thread_num);
         if(ret < 0){
-            printf("Error spawning consumer thread %d\n", i+1);
+            printf("Error spawning consumer thread %d\n", i);
             exit(-1);
         }
     }

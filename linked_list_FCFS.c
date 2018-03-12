@@ -46,7 +46,6 @@ struct PrintJob* popJob(){
     free(temp);
     
     int c = count();
-    printf("FUCK %d\n", c);
     if(c == QUEUE_MAX-1) // If queue is no longer full, free the full semaphore
         sem_post(&full);
     if(c != 0)

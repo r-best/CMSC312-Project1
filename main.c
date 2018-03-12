@@ -8,18 +8,51 @@
 
 #include "linked_list.h"
 
-void signalHandler(int signal){
-	if(signal == SIGINT){
-        return;
-    }
-}
-
 int randBetween(int min, int max){
     return rand() % (max + 1 - min) + min;
 }
 
 sem_t mutex;
+pthread_t *producers, *consumers;
 int numProducers, numConsumers, counter;
+
+void shutdown(){
+    printf("SHUTTING DOWN PROGRAM\n");
+
+    // Destroy semaphores
+    printf("\tDESTROYING SEMAPHORES\n");
+    if(sem_destroy(&full) == -1)
+        printf("\tError destroying semaphore");
+    if(sem_destroy(&empty) == -1)
+        printf("\tError destroying semaphore");
+    if(sem_destroy(&mutex) == -1)
+        printf("\tError destroying semaphore");
+    
+    // Shutting down threads
+    // printf("\tSHUTTING DOWN REAMINING THREADS\n");
+    // for(int i = 0; i < numProducers; i++){
+    //     pthread_kill(producers[i], 9);
+    // }
+    // for(int i = 0; i < numConsumers; i++){
+    //     pthread_kill(consumers[i], 9);
+    // }
+    
+    // Deallocate the producer and consumer arrays
+    printf("\tDEALLOCATING MEMORY\n");
+    free(producers);
+    free(consumers);
+
+    printf("\tEXITING\n");
+    exit(0);
+}
+
+void signalHandler(int signal){
+	if(signal == SIGINT){
+        // Wait on mutex so we don't destroy stuff while threads are working
+        sem_wait(&mutex);
+        shutdown();
+    }
+}
 
 void* producerFn(void *args){
     printf("Starting producer thread\n");
@@ -78,10 +111,10 @@ void* consumerFn(void *args){
 
 int main(int argc, char *argv[]){
     // Set up signal handler
-    // struct sigaction action;
-	// action.sa_handler = signalHandler;
-	// action.sa_flags = SA_NODEFER | SA_ONSTACK;
-	// sigaction(SIGINT, &action, NULL);
+    struct sigaction action;
+	action.sa_handler = signalHandler;
+	action.sa_flags = SA_NODEFER | SA_ONSTACK;
+	sigaction(SIGINT, &action, NULL);
 
     // Process args
     if(argc < 3){
@@ -106,7 +139,7 @@ int main(int argc, char *argv[]){
 
     // Create producers
     printf("Creating producer threads...\n");
-    pthread_t *producers = malloc(sizeof(pthread_t) * numProducers);
+    producers = malloc(sizeof(pthread_t) * numProducers);
     if(producers == NULL){
         printf("Error allocating memory\n");
         exit(-1);
@@ -122,7 +155,7 @@ int main(int argc, char *argv[]){
     // Create consumers
     printf("Creating consumer threads...\n");
     counter = 0;
-    pthread_t *consumers = malloc(sizeof(pthread_t) * numConsumers);
+    consumers = malloc(sizeof(pthread_t) * numConsumers);
     if(consumers == NULL){
         printf("Error allocating memory\n");
         exit(-1);
@@ -144,4 +177,6 @@ int main(int argc, char *argv[]){
         pthread_join(consumers[i], NULL);
     }
     printf("ALL CONSUMERS FINISHED\n");
+
+    shutdown();
 }

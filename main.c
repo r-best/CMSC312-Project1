@@ -16,7 +16,7 @@ sem_t mutex;
 pthread_t *producers, *consumers;
 int numProducers, numConsumers, counter;
 
-void shutdown(){
+int shutdown(){
     printf("SHUTTING DOWN PROGRAM\n");
 
     // Destroy semaphores
@@ -43,14 +43,14 @@ void shutdown(){
     free(consumers);
 
     printf("\tEXITING\n");
-    exit(0);
+    return 0;
 }
 
 void signalHandler(int signal){
 	if(signal == SIGINT){
         // Wait on mutex so we don't destroy stuff while threads are working
         sem_wait(&mutex);
-        shutdown();
+        exit(shutdown());
     }
 }
 
@@ -58,7 +58,8 @@ void* producerFn(void *args){
     int thread_num = *((int*)args);
     printf("Starting producer %d\n", thread_num);
     int numJobs = (rand() % 20) + 1;
-    for(int i = 0; i <= numJobs; i++){
+    int i = 0;
+    for(i = 0; i <= numJobs; i++){
         struct PrintJob *job = malloc(sizeof(struct PrintJob));
         if(job == NULL){
             printf("Error allocating memory for print job\n");
@@ -148,7 +149,8 @@ int main(int argc, char *argv[]){
         printf("Error allocating memory\n");
         exit(-1);
     }
-    for(int i = 1; i <= numProducers; i++){
+    int i = 0; // For loop iterator to make it compile on the server
+    for(i = 1; i <= numProducers; i++){
         int *thread_num = malloc(sizeof(int));
         if(thread_num == NULL){
             printf("Error allocating memory\n");
@@ -170,7 +172,7 @@ int main(int argc, char *argv[]){
         printf("Error allocating memory\n");
         exit(-1);
     }
-    for(int i = 1; i <= numConsumers; i++){
+    for(i = 1; i <= numConsumers; i++){
         int *thread_num = malloc(sizeof(int));
         if(thread_num == NULL){
             printf("Error allocating memory\n");
@@ -184,15 +186,15 @@ int main(int argc, char *argv[]){
         }
     }
 
-    for(int i = 0; i < numProducers; i++){
+    for(i = 0; i < numProducers; i++){
         pthread_join(producers[i], NULL);
     }
     printf("ALL PRODUCERS FINISHED\n");
 
-    for(int i = 0; i < numConsumers; i++){
+    for(i = 0; i < numConsumers; i++){
         pthread_join(consumers[i], NULL);
     }
     printf("ALL CONSUMERS FINISHED\n");
 
-    shutdown();
+    return shutdown();
 }

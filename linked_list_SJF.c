@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <sys/time.h>
 #include <semaphore.h>
 
 #include "linked_list.h"
@@ -8,6 +9,7 @@
 
 struct Node {
     struct PrintJob *job;
+    struct timeval timeAdded;
     struct Node *next;
 } *head;
 
@@ -19,6 +21,7 @@ void pushJob(struct PrintJob *job){
         exit(-1);
     }
     new->job = job;
+    gettimeofday(&(new->job->timeAdded), NULL);
     new->next = NULL;
 
     if(head == NULL) // If the list is empty, make this the head

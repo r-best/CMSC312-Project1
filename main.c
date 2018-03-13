@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <signal.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <unistd.h>
 #include <time.h>
 #include <pthread.h>
@@ -11,6 +12,22 @@
 // Helper function to generate a random number between min and max
 int randBetween(int min, int max){
     return rand() % (max + 1 - min) + min;
+}
+
+// Helper function to get microsecond value from a timeval struct
+long getMicroTime(struct timeval *t){
+    return (t->tv_sec * 1000000) + t->tv_usec;
+}
+
+// Helper function to store two integers in one uint64
+uint64_t compress2x32to64(int x, int y){
+    return (x & 0x0000FFFF) | (y << 16);
+}
+int getTopCompressed(uint64_t compressed){
+    return (int)(compressed & 0x0000FFFF);
+}
+int getBottomCompressed(uint64_t compressed){
+    return (int)(compressed >> 16);
 }
 
 sem_t mutex; // Lock for accessing the job queue
@@ -102,9 +119,10 @@ void* consumerFn(void *args){
 
     // Initial size of results (+1 is because the first item is not a job size, but the number of jobs)
     int resultsSize = numProducers+1;
-    int *results = malloc(sizeof(int) * resultsSize); // Malloc initial size of results
+    uint64_t *results = malloc(sizeof(uint64_t) * resultsSize); // Malloc initial size of results
     int jobsConsumed = 0;
 
+    struct timeval currentTime;
     while(counter < numProducers){
         sem_wait(&empty);
         sem_wait(&mutex);
@@ -113,24 +131,29 @@ void* consumerFn(void *args){
         if(job == NULL){
             continue;
         }
+        // Get current time
+        gettimeofday(&currentTime, NULL);
+        // Store the job's properties and free it
         int size = job->size;
+        int wait = getMicroTime(&currentTime) - getMicroTime(&(job->timeAdded));
         free(job);
 
         if(size < 0){ // If this is a flag job, increment counter to show a producer thread has finished
             counter++;
         }
-        else{ // Else it was an actual job, so add its size to results
+        else{ // Else it was an actual job, so add its data to results
             jobsConsumed++;
             if(jobsConsumed > resultsSize-1){ // Realloc results to double size if it's too small
                 resultsSize *= 2;
-                results = realloc(results, sizeof(int) * resultsSize);
+                results = realloc(results, sizeof(uint64_t) * resultsSize);
                 if(results == NULL){
                     printf("Error reallocating memory");
                     shutdown();
                     exit(-1);
                 }
             }
-            results[jobsConsumed] = size;
+            // Add size and wait to results by compressing into one uint64
+            results[jobsConsumed] = compress2x32to64(size, wait);
         }
         printf("Consumer %d consumed %d\n", thread_num, size);
         usleep((size / 1000)*1000000);
@@ -226,7 +249,7 @@ int main(int argc, char *argv[]){
     printf("ALL PRODUCERS FINISHED\n");
 
     // Join consumers
-    int* consumerResults[numConsumers]; // Array holding results from all consumer threads
+    uint64_t* consumerResults[numConsumers]; // Array holding results from all consumer threads
     for(i = 0; i < numConsumers; i++){
         pthread_join(consumers[i], (void**)&consumerResults[i]);
     }
@@ -249,7 +272,7 @@ int main(int argc, char *argv[]){
         printf("Consumer %d consumed %d jobs:\n", i+1, numJobs);
         int j = 0;
         for(j = 1; j <= numJobs; j++){
-            printf("\tJob %d: %d bytes\n", j, consumerResults[i][j]);
+            printf("\tJob %d: %d bytes, waited for %d microseconds\n", j, getTopCompressed(consumerResults[i][j]), getBottomCompressed(consumerResults[i][j]));
         }
         free(consumerResults[i]);
     }

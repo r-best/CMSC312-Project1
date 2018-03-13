@@ -58,6 +58,10 @@ void* producerFn(void *args){
     int thread_num = *((int*)args);
     printf("Starting producer %d\n", thread_num);
     int numJobs = (rand() % 20) + 1;
+
+    int *results = malloc(sizeof(int) * (numJobs+1));
+    results[0] = numJobs;
+
     int i = 0;
     for(i = 0; i <= numJobs; i++){
         struct PrintJob *job = malloc(sizeof(struct PrintJob));
@@ -65,8 +69,10 @@ void* producerFn(void *args){
             printf("Error allocating memory for print job\n");
             exit(-1);
         }
-        if(i < numJobs)
+        if(i < numJobs){
             job->size = randBetween(100, 1000);
+            results[i+1] = job->size;
+        }
         else // If all jobs done, insert a flag job instead (-1 size to tell consumers you're done)
             job->size = -1;
         sem_wait(&full);
@@ -81,7 +87,7 @@ void* producerFn(void *args){
     }
     printf("Producer %d exiting\n", thread_num);
     free(args);
-    pthread_exit(0);
+    pthread_exit(results);
 }
 
 void* consumerFn(void *args){
@@ -183,8 +189,9 @@ int main(int argc, char *argv[]){
         }
     }
 
+    int* producerResults[numProducers];
     for(i = 0; i < numProducers; i++){
-        pthread_join(producers[i], NULL);
+        pthread_join(producers[i], (void**)&producerResults[i]);
     }
     printf("ALL PRODUCERS FINISHED\n");
 
@@ -192,6 +199,15 @@ int main(int argc, char *argv[]){
         pthread_join(consumers[i], NULL);
     }
     printf("ALL CONSUMERS FINISHED\n");
+
+    for(i = 0; i < numProducers; i++){
+        int numJobs = producerResults[i][0];
+        printf("Producer %d produced %d jobs:\n", i+1, numJobs);
+        int j = 0;
+        for(j = 1; j <= numJobs; j++){
+            printf("\tJob %d: %d bytes\n", j, producerResults[i][j]);
+        }
+    }
 
     return shutdown();
 }

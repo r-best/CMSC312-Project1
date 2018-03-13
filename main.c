@@ -93,6 +93,11 @@ void* producerFn(void *args){
 void* consumerFn(void *args){
     int thread_num = *((int*)args);
     printf("Starting consumer %d\n", thread_num);
+
+    int resultsSize = 1;//numProducers+1;
+    int *results = malloc(sizeof(int) * resultsSize);
+    int jobsConsumed = 0;
+
     while(counter < numProducers){
         sem_wait(&empty);
         sem_wait(&mutex);
@@ -104,17 +109,29 @@ void* consumerFn(void *args){
         int size = job->size;
         free(job);
 
-        // If this is a flag job, increment counter
-        if(size < 0){
+        if(size < 0){ // If this is a flag job, increment counter
             counter++;
+        }
+        else{ // Else it was an actual job, so add its size to results
+            jobsConsumed++;
+            if(jobsConsumed > resultsSize-1){
+                resultsSize *= 2;
+                results = realloc(results, sizeof(int) * resultsSize);
+                if(results == NULL){
+                    printf("bad");
+                    exit(-1);
+                }
+            }
+            results[jobsConsumed] = size;
         }
         printf("Consumer %d consumed %d\n", thread_num, size);
         usleep((size / 1000)*1000000);
     }
     printf("Consumer %d exiting\n", thread_num);
     sem_post(&empty);
+    results[0] = jobsConsumed;
     free(args);
-    pthread_exit(0);
+    pthread_exit(results);
 }
 
 int main(int argc, char *argv[]){
@@ -195,8 +212,9 @@ int main(int argc, char *argv[]){
     }
     printf("ALL PRODUCERS FINISHED\n");
 
+    int* consumerResults[numConsumers];
     for(i = 0; i < numConsumers; i++){
-        pthread_join(consumers[i], NULL);
+        pthread_join(consumers[i], (void**)&consumerResults[i]);
     }
     printf("ALL CONSUMERS FINISHED\n");
 
@@ -206,6 +224,15 @@ int main(int argc, char *argv[]){
         int j = 0;
         for(j = 1; j <= numJobs; j++){
             printf("\tJob %d: %d bytes\n", j, producerResults[i][j]);
+        }
+    }
+
+    for(i = 0; i < numConsumers; i++){
+        int numJobs = consumerResults[i][0];
+        printf("Consumer %d consumed %d jobs:\n", i+1, numJobs);
+        int j = 0;
+        for(j = 1; j <= numJobs; j++){
+            printf("\tJob %d: %d bytes\n", j, consumerResults[i][j]);
         }
     }
 

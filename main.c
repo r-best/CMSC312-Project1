@@ -19,15 +19,19 @@ long getMicroTime(struct timeval *t){
     return (t->tv_sec * 1000000) + t->tv_usec;
 }
 
+uint32_t getMicroSecondsDiff(struct timeval *start, struct timeval *end){
+    return (uint32_t)(getMicroTime(start) - getMicroTime(end));
+}
+
 // Helper function to store two integers in one uint64
-uint64_t compress2x32to64(int x, int y){
+uint64_t compress2x32to64(uint32_t x, uint32_t y){
     return (x & 0x0000FFFF) | (y << 16);
 }
-int getTopCompressed(uint64_t compressed){
-    return (int)(compressed & 0x0000FFFF);
+uint32_t getTopCompressed(uint64_t compressed){
+    return (uint32_t)(compressed & 0x0000FFFF);
 }
-int getBottomCompressed(uint64_t compressed){
-    return (int)(compressed >> 16);
+uint32_t getBottomCompressed(uint64_t compressed){
+    return (uint32_t)(compressed >> 16);
 }
 
 sem_t mutex; // Lock for accessing the job queue
@@ -120,7 +124,7 @@ void* consumerFn(void *args){
     // Initial size of results (+1 is because the first item is not a job size, but the number of jobs)
     int resultsSize = numProducers+1;
     uint64_t *results = malloc(sizeof(uint64_t) * resultsSize); // Malloc initial size of results
-    int jobsConsumed = 0;
+    uint64_t jobsConsumed = 0;
 
     struct timeval currentTime;
     while(counter < numProducers){
@@ -135,9 +139,10 @@ void* consumerFn(void *args){
         gettimeofday(&currentTime, NULL);
         // Store the job's properties and free it
         int size = job->size;
-        int wait = getMicroTime(&currentTime) - getMicroTime(&(job->timeAdded));
+        uint32_t wait = getMicroSecondsDiff(&currentTime, &(job->timeAdded));
         free(job);
 
+        printf("Consumer %d consumed %d\n", thread_num, size);
         if(size < 0){ // If this is a flag job, increment counter to show a producer thread has finished
             counter++;
         }
@@ -154,9 +159,8 @@ void* consumerFn(void *args){
             }
             // Add size and wait to results by compressing into one uint64
             results[jobsConsumed] = compress2x32to64(size, wait);
+            usleep((size / 100)*1000000);
         }
-        printf("Consumer %d consumed %d\n", thread_num, size);
-        usleep((size / 1000)*1000000);
     }
     printf("Consumer %d exiting\n", thread_num);
     sem_post(&empty);
@@ -271,19 +275,19 @@ int main(int argc, char *argv[]){
     // Print out consumer results
     double averageWaitTime = 0;
     for(i = 0; i < numConsumers; i++){
-        int numJobs = consumerResults[i][0];
-        printf("Consumer %d consumed %d jobs:\n", i+1, numJobs);
+        uint64_t numJobs = consumerResults[i][0];
+        printf("Consumer %d consumed %ld jobs:\n", i+1, numJobs);
         int j = 0;
         for(j = 1; j <= numJobs; j++){
-            int size = getTopCompressed(consumerResults[i][j]);
-            int waitTime = getBottomCompressed(consumerResults[i][j]);
+            uint32_t size = getTopCompressed(consumerResults[i][j]);
+            uint32_t waitTime = getBottomCompressed(consumerResults[i][j]);
             printf("\tJob %d: %d bytes, waited for %d microseconds\n", j, size, waitTime);
             averageWaitTime += waitTime;
         }
         free(consumerResults[i]);
     }
-    averageWaitTime /= totalNumJobs;
-    printf("Average wait time: %f microseconds\n", averageWaitTime);
+    averageWaitTime /= (double)totalNumJobs;
+    printf("Average wait time: %f microseconds => %f seconds\n", averageWaitTime, averageWaitTime / 1000000.0);
     
     shutdown();
     return 0;

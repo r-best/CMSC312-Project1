@@ -76,11 +76,8 @@ void* producerFn(void *args){
         printf("Producer %d produced %d\n", thread_num, job->size);
         sem_post(&mutex);
 
-        float seconds = randBetween(1, 10) / 10;
-        struct timespec ts;
-        ts.tv_sec = seconds;
-        ts.tv_nsec = seconds * 1000000000;
-        nanosleep(&ts, NULL);
+        int seconds = randBetween(1, 10) / 10; // 0.1-1 seconds
+        usleep(seconds * 1000000);
     }
     printf("Producer %d exiting\n", thread_num);
     free(args);
@@ -106,7 +103,7 @@ void* consumerFn(void *args){
             counter++;
         }
         printf("Consumer %d consumed %d\n", thread_num, size);
-        sleep(size / 1000);
+        usleep((size / 1000)*1000000);
     }
     printf("Consumer %d exiting\n", thread_num);
     sem_post(&empty);

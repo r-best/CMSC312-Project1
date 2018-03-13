@@ -8,15 +8,16 @@
 
 #include "linked_list.h"
 
+// Helper function to generate a random number between min and max
 int randBetween(int min, int max){
     return rand() % (max + 1 - min) + min;
 }
 
-sem_t mutex;
-pthread_t *producers, *consumers;
-int numProducers, numConsumers, counter;
+sem_t mutex; // Lock for accessing the job queue
+pthread_t *producers, *consumers; 
+int numProducers, numConsumers, counter; // Counter keeps track of how many producers have finished
 
-int shutdown(){
+void shutdown(){
     printf("SHUTTING DOWN PROGRAM\n");
 
     // Destroy semaphores
@@ -43,59 +44,65 @@ int shutdown(){
     free(consumers);
 
     printf("\tEXITING\n");
-    return 0;
 }
 
 void signalHandler(int signal){
 	if(signal == SIGINT){
         // Wait on mutex so we don't destroy stuff while threads are working
         sem_wait(&mutex);
-        exit(shutdown());
+        shutdown();
+        exit(0);
     }
 }
 
 void* producerFn(void *args){
-    int thread_num = *((int*)args);
+    int thread_num = *((int*)args); // Get the thread's number from args
     printf("Starting producer %d\n", thread_num);
-    int numJobs = (rand() % 20) + 1;
+    int numJobs = (rand() % 20) + 1; // Randomly generate number of jobs
 
+    // Malloc array of results to be returned from thread on completion,
+    // first item is number of items, the rest are the sizes of all jobs produced
     int *results = malloc(sizeof(int) * (numJobs+1));
     results[0] = numJobs;
 
     int i = 0;
-    for(i = 0; i <= numJobs; i++){
-        struct PrintJob *job = malloc(sizeof(struct PrintJob));
+    for(i = 0; i <= numJobs; i++){ // For each job (plus one)
+        struct PrintJob *job = malloc(sizeof(struct PrintJob)); // Malloc a PrintJob
         if(job == NULL){
             printf("Error allocating memory for print job\n");
+            shutdown();
             exit(-1);
         }
-        if(i < numJobs){
-            job->size = randBetween(100, 1000);
-            results[i+1] = job->size;
+        if(i < numJobs){ // If for loop is NOT on its last loop (i.e. still producing jobs)
+            job->size = randBetween(100, 1000); // Generate job size
+            results[i+1] = job->size; // Record this job in results
         }
         else // If all jobs done, insert a flag job instead (-1 size to tell consumers you're done)
             job->size = -1;
         sem_wait(&full);
         sem_wait(&mutex);
         sem_post(&full);
-        pushJob(job);
+        pushJob(job); // Push job onto queue
         printf("Producer %d produced %d\n", thread_num, job->size);
         sem_post(&mutex);
 
+        // Randomly wait 0.1-1 seconds
         int seconds = randBetween(1, 10) / 10; // 0.1-1 seconds
         usleep(seconds * 1000000);
     }
     printf("Producer %d exiting\n", thread_num);
     free(args);
+    // Exit and pass the results back to the main thread to be displayed at the end
     pthread_exit(results);
 }
 
 void* consumerFn(void *args){
-    int thread_num = *((int*)args);
+    int thread_num = *((int*)args); // Get the thread's number from args
     printf("Starting consumer %d\n", thread_num);
 
-    int resultsSize = 1;//numProducers+1;
-    int *results = malloc(sizeof(int) * resultsSize);
+    // Initial size of results (+1 is because the first item is not a job size, but the number of jobs)
+    int resultsSize = numProducers+1;
+    int *results = malloc(sizeof(int) * resultsSize); // Malloc initial size of results
     int jobsConsumed = 0;
 
     while(counter < numProducers){
@@ -109,16 +116,17 @@ void* consumerFn(void *args){
         int size = job->size;
         free(job);
 
-        if(size < 0){ // If this is a flag job, increment counter
+        if(size < 0){ // If this is a flag job, increment counter to show a producer thread has finished
             counter++;
         }
         else{ // Else it was an actual job, so add its size to results
             jobsConsumed++;
-            if(jobsConsumed > resultsSize-1){
+            if(jobsConsumed > resultsSize-1){ // Realloc results to double size if it's too small
                 resultsSize *= 2;
                 results = realloc(results, sizeof(int) * resultsSize);
                 if(results == NULL){
-                    printf("bad");
+                    printf("Error reallocating memory");
+                    shutdown();
                     exit(-1);
                 }
             }
@@ -129,7 +137,7 @@ void* consumerFn(void *args){
     }
     printf("Consumer %d exiting\n", thread_num);
     sem_post(&empty);
-    results[0] = jobsConsumed;
+    results[0] = jobsConsumed; // Now that we have # of jobs consumed, put it in first spot of results
     free(args);
     pthread_exit(results);
 }
@@ -174,12 +182,14 @@ int main(int argc, char *argv[]){
         int *thread_num = malloc(sizeof(int));
         if(thread_num == NULL){
             printf("Error allocating memory\n");
+            shutdown();
             exit(-1);
         }
         *thread_num = i;
         int ret = pthread_create(&producers[i-1], NULL, producerFn, thread_num);
         if(ret < 0){
             printf("Error spawning producer thread %d\n", i);
+            shutdown();
             exit(-1);
         }
     }
@@ -196,28 +206,33 @@ int main(int argc, char *argv[]){
         int *thread_num = malloc(sizeof(int));
         if(thread_num == NULL){
             printf("Error allocating memory\n");
+            shutdown();
             exit(-1);
         }
         *thread_num = i;
         int ret = pthread_create(&consumers[i-1], NULL, consumerFn, thread_num);
         if(ret < 0){
             printf("Error spawning consumer thread %d\n", i);
+            shutdown();
             exit(-1);
         }
     }
 
-    int* producerResults[numProducers];
+    // Join producers
+    int* producerResults[numProducers]; // Array holding results from all producer threads
     for(i = 0; i < numProducers; i++){
         pthread_join(producers[i], (void**)&producerResults[i]);
     }
     printf("ALL PRODUCERS FINISHED\n");
 
-    int* consumerResults[numConsumers];
+    // Join consumers
+    int* consumerResults[numConsumers]; // Array holding results from all consumer threads
     for(i = 0; i < numConsumers; i++){
         pthread_join(consumers[i], (void**)&consumerResults[i]);
     }
     printf("ALL CONSUMERS FINISHED\n");
 
+    // Print out producer results
     for(i = 0; i < numProducers; i++){
         int numJobs = producerResults[i][0];
         printf("Producer %d produced %d jobs:\n", i+1, numJobs);
@@ -225,8 +240,10 @@ int main(int argc, char *argv[]){
         for(j = 1; j <= numJobs; j++){
             printf("\tJob %d: %d bytes\n", j, producerResults[i][j]);
         }
+        free(producerResults[i]);
     }
 
+    // Print out consumer results
     for(i = 0; i < numConsumers; i++){
         int numJobs = consumerResults[i][0];
         printf("Consumer %d consumed %d jobs:\n", i+1, numJobs);
@@ -234,7 +251,9 @@ int main(int argc, char *argv[]){
         for(j = 1; j <= numJobs; j++){
             printf("\tJob %d: %d bytes\n", j, consumerResults[i][j]);
         }
+        free(consumerResults[i]);
     }
-
-    return shutdown();
+    
+    shutdown();
+    return 0;
 }

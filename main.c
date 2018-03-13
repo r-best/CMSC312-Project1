@@ -256,26 +256,34 @@ int main(int argc, char *argv[]){
     printf("ALL CONSUMERS FINISHED\n");
 
     // Print out producer results
+    int totalNumJobs = 0;
     for(i = 0; i < numProducers; i++){
         int numJobs = producerResults[i][0];
         printf("Producer %d produced %d jobs:\n", i+1, numJobs);
         int j = 0;
         for(j = 1; j <= numJobs; j++){
             printf("\tJob %d: %d bytes\n", j, producerResults[i][j]);
+            totalNumJobs++;
         }
         free(producerResults[i]);
     }
 
     // Print out consumer results
+    double averageWaitTime = 0;
     for(i = 0; i < numConsumers; i++){
         int numJobs = consumerResults[i][0];
         printf("Consumer %d consumed %d jobs:\n", i+1, numJobs);
         int j = 0;
         for(j = 1; j <= numJobs; j++){
-            printf("\tJob %d: %d bytes, waited for %d microseconds\n", j, getTopCompressed(consumerResults[i][j]), getBottomCompressed(consumerResults[i][j]));
+            int size = getTopCompressed(consumerResults[i][j]);
+            int waitTime = getBottomCompressed(consumerResults[i][j]);
+            printf("\tJob %d: %d bytes, waited for %d microseconds\n", j, size, waitTime);
+            averageWaitTime += waitTime;
         }
         free(consumerResults[i]);
     }
+    averageWaitTime /= totalNumJobs;
+    printf("Average wait time: %f microseconds\n", averageWaitTime);
     
     shutdown();
     return 0;

@@ -1,4 +1,4 @@
-default: FCFS
+default: FCFS SJF
 
 FCFS: FCFS.out
 

@@ -35,7 +35,7 @@ uint32_t getBottomCompressed(uint64_t compressed){
 }
 
 sem_t mutex; // Lock for accessing the job queue
-pthread_t *producers, *consumers; 
+pthread_t *producers, *consumers;  // Arrays of producers and consumers
 int numProducers, numConsumers, counter; // Counter keeps track of how many producers have finished
 
 void shutdown(){
@@ -44,22 +44,15 @@ void shutdown(){
     // Destroy semaphores
     printf("\tDESTROYING SEMAPHORES\n");
     if(sem_destroy(&full) == -1)
-        printf("\tError destroying semaphore");
+        printf("\tError destroying semaphore 'full'");
     if(sem_destroy(&empty) == -1)
-        printf("\tError destroying semaphore");
+        printf("\tError destroying semaphore 'empty'");
     if(sem_destroy(&mutex) == -1)
-        printf("\tError destroying semaphore");
-    
-    // Shutting down threads
-    // printf("\tSHUTTING DOWN REAMINING THREADS\n");
-    // for(int i = 0; i < numProducers; i++){
-    //     pthread_kill(producers[i], 9);
-    // }
-    // for(int i = 0; i < numConsumers; i++){
-    //     pthread_kill(consumers[i], 9);
-    // }
+        printf("\tError destroying semaphore 'mutex'");
     
     // Deallocate the producer and consumer arrays
+    // All other memory should be freeing itself when its job is
+    // done as the program goes, I think I did pretty good on that
     printf("\tDEALLOCATING MEMORY\n");
     free(producers);
     free(consumers);
@@ -87,15 +80,15 @@ void* producerFn(void *args){
     results[0] = numJobs;
 
     int i = 0;
-    for(i = 0; i <= numJobs; i++){ // For each job (plus one)
+    for(i = 0; i <= numJobs; i++){ // For each job (plus one, last loop inserts a -1 sized job as a flag)
         struct PrintJob *job = malloc(sizeof(struct PrintJob)); // Malloc a PrintJob
         if(job == NULL){
             printf("Error allocating memory for print job\n");
             shutdown();
             exit(-1);
         }
-        if(i < numJobs){ // If for loop is NOT on its last loop (i.e. still producing jobs)
-            job->size = randBetween(100, 1000); // Generate job size
+        if(i < numJobs){ // If for loop is NOT on its last iteration (i.e. still producing jobs)
+            job->size = randBetween(100, 1000); // Generate random job size
             results[i+1] = job->size; // Record this job in results
         }
         else // If all jobs done, insert a flag job instead (-1 size to tell consumers you're done)
@@ -108,7 +101,7 @@ void* producerFn(void *args){
         sem_post(&mutex);
 
         // Randomly wait 0.1-1 seconds
-        int seconds = randBetween(1, 10) / 10; // 0.1-1 seconds
+        double seconds = randBetween(1, 10) / 10; // 0.1-1 seconds
         usleep(seconds * 1000000);
     }
     printf("Producer %d exiting\n", thread_num);
@@ -121,7 +114,7 @@ void* consumerFn(void *args){
     int thread_num = *((int*)args); // Get the thread's number from args
     printf("Starting consumer %d\n", thread_num);
 
-    // Initial size of results (+1 is because the first item is not a job size, but the number of jobs)
+    // Initial size of results (+1 is because the first item is not a job, but the total number of jobs)
     int resultsSize = numProducers+1;
     uint64_t *results = malloc(sizeof(uint64_t) * resultsSize); // Malloc initial size of results
     uint64_t jobsConsumed = 0;
@@ -157,8 +150,9 @@ void* consumerFn(void *args){
                     exit(-1);
                 }
             }
-            // Add size and wait to results by compressing into one uint64
+            // Add size and wait to results in one element by compressing into one uint64
             results[jobsConsumed] = compress2x32to64(size, wait);
+            // Sleep based on job size (size/100 seconds)
             usleep((size / 100)*1000000);
         }
     }
@@ -166,6 +160,7 @@ void* consumerFn(void *args){
     sem_post(&empty);
     results[0] = jobsConsumed; // Now that we have # of jobs consumed, put it in first spot of results
     free(args);
+    // Exit and pass the results back to the main thread to be displayed at the end
     pthread_exit(results);
 }
 
@@ -262,7 +257,7 @@ int main(int argc, char *argv[]){
     // Print out producer results
     int totalNumJobs = 0;
     for(i = 0; i < numProducers; i++){
-        int numJobs = producerResults[i][0];
+        int numJobs = producerResults[i][0]; // First item of results is number of results
         printf("Producer %d produced %d jobs:\n", i+1, numJobs);
         int j = 0;
         for(j = 1; j <= numJobs; j++){
@@ -275,10 +270,11 @@ int main(int argc, char *argv[]){
     // Print out consumer results
     double averageWaitTime = 0;
     for(i = 0; i < numConsumers; i++){
-        uint64_t numJobs = consumerResults[i][0];
+        uint64_t numJobs = consumerResults[i][0]; // First item of results is number of results
         printf("Consumer %d consumed %ld jobs:\n", i+1, numJobs);
         int j = 0;
         for(j = 1; j <= numJobs; j++){
+            // Retrieve size and wait time from compressed uint64
             uint32_t size = getTopCompressed(consumerResults[i][j]);
             uint32_t waitTime = getBottomCompressed(consumerResults[i][j]);
             printf("\tJob %d: %d bytes, waited for %d microseconds\n", j, size, waitTime);
